@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>渐变壁纸生成器</title>
+<style>
+  :root{
+    --bg: #ececef;
+    --surface: #ffffff;
+    --surface-2: #f4f4f6;
+    --border: #e2e2e6;
+    --text: #1a1a1c;
+    --muted: #86868d;
+    --accent: #1a1a1c;
+    --accent-fg: #ffffff;
+    --track: #e2e2e6;
+    --shadow: 0 2px 18px rgba(0,0,0,.06);
+  }
+  html[data-theme="dark"]{
+    --bg: #121214;
+    --surface: #1b1b1e;
+    --surface-2: #232327;
+    --border: #2c2c32;
+    --text: #f2f2f4;
+    --muted: #8e8e96;
+    --accent: #f2f2f4;
+    --accent-fg: #121214;
+    --track: #2c2c32;
+    --shadow: 0 2px 18px rgba(0,0,0,.4);
+  }
+
+  *{ box-sizing: border-box; }
+  html, body{ height: 100%; }
+
+  body{
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* ============ 桌面端双栏骨架 ============ */
+  .app{
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 16px;
+    height: calc(100vh - 32px);
+    height: calc(100dvh - 32px);
+  }
+
+  /* ============ 左侧预览 ============ */
+  .stage{
+    background: var(--surface);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    container-type: size;
+  }
+
+  .canvas-wrap{
+    position: relative;
+    aspect-ratio: 9 / 16;
+    height: 100%;
+    max-width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 8px 30px rgba(0,0,0,.14);
+    cursor: pointer;
+    transition: box-shadow .2s;
+  }
+  .canvas-wrap.drag{
+    box-shadow: 0 0 0 3px var(--muted);
+  }
+
+  @supports (width: 1cqw){
+    .canvas-wrap{
+      height: auto;
+      width: min(100cqw, calc(100cqh * 9 / 16));
+    }
+  }
+
+  canvas{
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .placeholder{
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    background: #fff;
+    color: #8a8a92;
+    text-align: center;
+    transition: background .15s;
+  }
+  .placeholder[hidden] { display: none !important; }
+  .placeholder:hover{ background: #f7f7f9; }
+  .placeholder svg{ color: #b4b4bc; }
+  .placeholder .ph-title{
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a4a52;
+  }
+  .placeholder .ph-sub{
+    font-size: 11px;
+    color: #9a9aa2;
+  }
+
+  /* ============ 卡片外壳 ============ */
+  .sheet{
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .sheet-handle{ display: none; }
+
+  /* ============ 右侧设置（只负责滚动） ============ */
+  .panel{
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 24px 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .panel::-webkit-scrollbar{ width: 6px; }
+  .panel::-webkit-scrollbar-thumb{
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  .panel-head{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .panel-head h1{
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+
+  .theme-btn{
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .theme-btn:hover{ border-color: var(--muted); }
+
+  /* ============ 控件 ============ */
+  .field{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .field-head{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .field-head label{ cursor: default; }
+  .field-head output{
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[type="range"]{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]:focus-visible{
+    outline: 2px solid var(--muted);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track{
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: var(--text);
+    border: 3px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+    transition: transform .12s;
+  }
+  input[type="range"]:active::-webkit-slider-thumb{
+    transform: scale(1.15);
+  }
+  input[type="range"]::-moz-range-track{
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+  }
+  input[type="range"]::-moz-range-thumb{
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text);
+    border: 3px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+    transition: transform .12s;
+  }
+  input[type="range"]:active::-moz-range-thumb{
+    transform: scale(1.15);
+  }
+
+  select{
+    width: 100%;
+    padding: 11px 12px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color .15s;
+  }
+  select:focus{ border-color: var(--muted); }
+
+  .btn-primary{
+    padding: 13px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--accent-fg);
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+  }
+  .btn-primary:hover:not(:disabled){ opacity: .88; }
+  .btn-primary:active:not(:disabled){ transform: scale(.99); }
+  .btn-primary:disabled{ opacity: .35; cursor: not-allowed; }
+
+  /* ============ 导出区（常驻底部） ============ */
+  .panel-footer{
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 24px calc(16px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .panel-footer .btn-primary{ margin-top: 0; }
+
+  .info{
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.7;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    min-height: 16px;
+  }
+
+  /* ============ 移动端：单屏 + 抽屉 ============ */
+  @media (max-width: 900px){
+    body{
+      padding: 0;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    .app{
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      height: 100vh;
+      height: 100dvh;
+      padding: 8px 8px 0;
+    }
+
+    .stage{
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 6px;
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .sheet{
+      flex: 0 0 auto;
+      height: 58dvh; 
+      min-height: 24px;
+      max-height: 85dvh; 
+      margin-top: 8px;
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -6px 24px rgba(0,0,0,.14);
+      transition: height .28s cubic-bezier(.22,.61,.36,1);
+      will-change: height;
+      display: flex;
+      flex-direction: column;
+    }
+    .sheet.collapsed{ height: 24px; }
+
+    .sheet-handle{
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 24px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: ns-resize;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sheet-handle span{
+      width: 44px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      transition: background .15s;
+    }
+    .sheet-handle:active span{ background: var(--muted); }
+
+    .panel{
+      padding: 2px 16px 16px;
+      gap: 12px;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .panel-head h1{ font-size: 14px; }
+    .field{ gap: 8px; }
+
+    .panel-footer{
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--border);
+      gap: 8px;
+    }
+    .info{ font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- 左侧 / 顶部：预览 -->
+  <main class="stage">
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="canvas" width="1080" height="1920"></canvas>
+      <div class="placeholder" id="placeholder">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <div class="ph-title">点击选择图片</div>
+        <div class="ph-sub">支持拖拽与粘贴 · 输出 1080 × 1920</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 右侧 / 底部：设置抽屉 -->
+  <div class="sheet" id="sheet">
+    <button class="sheet-handle" id="sheetHandle" type="button"
+            aria-expanded="true" aria-label="收起或展开设置">
+      <span></span>
+    </button>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <h1>设置</h1>
+        <button class="theme-btn" id="themeBtn" type="button">日间模式</button>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="radius">圆形大小</label>
+          <output id="radiusVal" for="radius">50%</output>
+        </div>
+        <input type="range" id="radius" min="10" max="100" step="1" value="50">
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="feather">羽化强度</label>
+          <output id="featherVal" for="feather">30%</output>
+        </div>
+        <input type="range" id="feather" min="0" max="100" step="1" value="30">
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="offsetX">水平位移</label>
+          <output id="offsetXVal" for="offsetX">0%</output>
+        </div>
+        <input type="range" id="offsetX" min="-50" max="50" step="1" value="0">
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="offsetY">垂直位移</label>
+          <output id="offsetYVal" for="offsetY">0%</output>
+        </div>
+        <input type="range" id="offsetY" min="-50" max="50" step="1" value="0">
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="format">导出格式</label>
+        </div>
+        <select id="format">
+          <option value="png">PNG（无损）</option>
+          <option value="jpeg">JPG（体积较小）</option>
+        </select>
+      </div>
+    </aside>
+
+    <div class="panel-footer">
+      <button class="btn-primary" id="exportBtn" type="button" disabled>导出 9:16 图片</button>
+      <div class="info" id="info">未载入图片</div>
+    </div>
+  </div>
+
+</div>
+
+<input type="file" id="fileInput" accept="image/*" hidden>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ======================= 引用 ======================= */
+  var canvas      = document.getElementById('canvas');
+  var ctx         = canvas.getContext('2d');
+  var W           = canvas.width;
+  var H           = canvas.height;
+
+  var canvasWrap  = document.getElementById('canvasWrap');
+  var placeholder = document.getElementById('placeholder');
+  var fileInput   = document.getElementById('fileInput');
+  var radiusInput = document.getElementById('radius');
+  var radiusVal   = document.getElementById('radiusVal');
+  var featherInput= document.getElementById('feather');
+  var featherVal  = document.getElementById('featherVal');
+  var offsetXInput= document.getElementById('offsetX');
+  var offsetXVal  = document.getElementById('offsetXVal');
+  var offsetYInput= document.getElementById('offsetY');
+  var offsetYVal  = document.getElementById('offsetYVal');
+  var formatSelect= document.getElementById('format');
+  var exportBtn   = document.getElementById('exportBtn');
+  var info        = document.getElementById('info');
+  var themeBtn    = document.getElementById('themeBtn');
+
+  var sheet       = document.getElementById('sheet');
+  var sheetHandle = document.getElementById('sheetHandle');
+  var mqMobile    = window.matchMedia('(max-width: 900px)');
+
+  /* ======================= 状态 ======================= */
+  var img       = null;
+  var imgUrl    = null;
+  var baseName  = 'image';
+  var loadToken = 0;
+
+  var radiusPct  = Number(radiusInput.value);
+  var featherPct = Number(featherInput.value);
+  var offsetX    = Number(offsetXInput.value);
+  var offsetY    = Number(offsetYInput.value);
+
+  var MASK_W = 540;
+  var MASK_H = 960;
+  var maskCanvas = null;
+  var maskDirty  = true;
+
+  var renderScheduled = false;
+
+  /* ======================= 渲染调度 ======================= */
+  function requestRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    requestAnimationFrame(function () {
+      renderScheduled = false;
+      render();
+    });
+  }
+
+  /* ======================= 蒙版构建 ======================= */
+  function rebuildMask() {
+    if (!maskCanvas) {
+      maskCanvas = document.createElement('canvas');
+      maskCanvas.width  = MASK_W;
+      maskCanvas.height = MASK_H;
+    }
+    var mctx = maskCanvas.getContext('2d');
+    mctx.clearRect(0, 0, MASK_W, MASK_H);
+
+    var cx = MASK_W / 2;
+    var cy = MASK_H / 2;
+    var R  = (radiusPct / 100) * MASK_W;
+    var feather = (featherPct / 100) * R;
+    var innerR  = Math.max(0, R - Math.max(feather, 0.5));
+
+    var grad = mctx.createRadialGradient(cx, cy, innerR, cx, cy, R);
+    var STEPS = 32;
+    for (var i = 0; i <= STEPS; i++) {
+      var t = i / STEPS;
+      var a = t * t * (3 - 2 * t);
+      grad.addColorStop(t, 'rgba(255,255,255,' + a.toFixed(5) + ')');
+    }
+    mctx.fillStyle = grad;
+    mctx.fillRect(0, 0, MASK_W, MASK_H);
+  }
+
+  /* ======================= 主渲染 ======================= */
+  function render() {
+    if (maskDirty) {
+      rebuildMask();
+      maskDirty = false;
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    if (!img) return;
+
+    var iw = img.naturalWidth;
+    var ih = img.naturalHeight;
+    var s  = Math.min(W / iw, H / ih);
+    var dw = iw * s;
+    var dh = ih * s;
+    var dx = (W - dw) / 2 + (offsetX / 100) * W;
+    var dy = (H - dh) / 2 + (offsetY / 100) * H;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, dx, dy, dw, dh);
+
+    ctx.drawImage(maskCanvas, 0, 0, W, H);
+  }
+
+  /* ======================= 图片载入 ======================= */
+  function loadFile(file) {
+    if (!file || !file.type || file.type.indexOf('image/') !== 0) return;
+
+    var token = ++loadToken;
+    var url   = URL.createObjectURL(file);
+    var im    = new Image();
+    im.decoding = 'async';
+
+    im.onload = function () {
+      if (token !== loadToken) { URL.revokeObjectURL(url); return; }
+      if (imgUrl) URL.revokeObjectURL(imgUrl);
+      imgUrl   = url;
+      img      = im;
+      baseName = (file.name || 'image').replace(/\.[^.]+$/, '') || 'image';
+
+      placeholder.hidden = true;
+      exportBtn.disabled = false;
+      info.textContent = '原图 ' + im.naturalWidth + ' × ' + im.naturalHeight +
+                         ' · 输出 1080 × 1920';
+
+      // 选图后，自动展开抽屉到刚好包裹内容的自然高度
+      if (mqMobile.matches) {
+        sheet.classList.remove('collapsed');
+        requestAnimationFrame(function() {
+          sheet.style.height = getNaturalHeight() + 'px';
+        });
+        sheetHandle.setAttribute('aria-expanded', 'true');
+      }
+
+      requestRender();
+    };
+
+    im.onerror = function () {
+      URL.revokeObjectURL(url);
+      if (token === loadToken) info.textContent = '图片载入失败';
+    };
+
+    im.src = url;
+  }
+
+  /* ======================= 导出 ======================= */
+  function exportImage() {
+    if (!img) return;
+
+    render();
+
+    var fmt   = formatSelect.value;
+    var mime  = fmt === 'png' ? 'image/png' : 'image/jpeg';
+    var ext   = fmt === 'png' ? 'png' : 'jpg';
+    var label = exportBtn.textContent;
+
+    exportBtn.disabled = true;
+    exportBtn.textContent = '正在导出';
+
+    canvas.toBlob(function (blob) {
+      exportBtn.disabled = false;
+      exportBtn.textContent = label;
+
+      if (!blob) { info.textContent = '导出失败'; return; }
+
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = baseName + '-9x16.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+
+      info.textContent = '已导出 ' + ext.toUpperCase() + ' · 1080 × 1920';
+    }, mime, 0.95);
+  }
+
+  /* ======================= 滑块 ======================= */
+  function signedPct(v) {
+    return (v > 0 ? '+' : '') + v + '%';
+  }
+
+  function bindRange(input, output, formatter, onChange) {
+    var update = function () {
+      var v = Number(input.value);
+      output.textContent = formatter(v);
+      onChange(v);
+    };
+    input.addEventListener('input', update);
+    update();
+  }
+
+  bindRange(radiusInput, radiusVal, function (v) { return v + '%'; }, function (v) {
+    radiusPct = v;
+    maskDirty = true;
+    requestRender();
+  });
+
+  bindRange(featherInput, featherVal, function (v) { return v + '%'; }, function (v) {
+    featherPct = v;
+    maskDirty = true;
+    requestRender();
+  });
+
+  bindRange(offsetXInput, offsetXVal, signedPct, function (v) {
+    offsetX = v;
+    requestRender();
+  });
+
+  bindRange(offsetYInput, offsetYVal, signedPct, function (v) {
+    offsetY = v;
+    requestRender();
+  });
+
+  /* ======================= 文件选择 ======================= */
+  function openPicker() {
+    fileInput.click();
+  }
+
+  canvasWrap.addEventListener('click', openPicker);
+
+  fileInput.addEventListener('change', function () {
+    var f = fileInput.files && fileInput.files[0];
+    if (f) loadFile(f);
+    fileInput.value = '';
+  });
+
+  /* ======================= 拖拽与粘贴 ======================= */
+  var dragDepth = 0;
+
+  function setDrag(on) {
+    canvasWrap.classList.toggle('drag', on);
+  }
+
+  window.addEventListener('dragenter', function (e) {
+    e.preventDefault();
+    dragDepth++;
+    setDrag(true);
+  });
+  window.addEventListener('dragover', function (e) {
+    e.preventDefault();
+  });
+  window.addEventListener('dragleave', function () {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setDrag(false);
+  });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dragDepth = 0;
+    setDrag(false);
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  window.addEventListener('paste', function (e) {
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image/') === 0) {
+        var f = items[i].getAsFile();
+        if (f) { loadFile(f); break; }
+      }
+    }
+  });
+
+  /* ======================= 导出 ======================= */
+  exportBtn.addEventListener('click', exportImage);
+
+  /* ======================= 主题 ======================= */
+  var rootEl = document.documentElement;
+
+  function applyTheme(t) {
+    rootEl.setAttribute('data-theme', t);
+    themeBtn.textContent = (t === 'light') ? '夜间模式' : '日间模式';
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem('theme'); } catch (err) { saved = null; }
+  applyTheme(saved === 'light' ? 'light' : 'dark');
+
+  themeBtn.addEventListener('click', function () {
+    var next = (rootEl.getAttribute('data-theme') === 'light') ? 'dark' : 'light';
+    applyTheme(next);
+    try { localStorage.setItem('theme', next); } catch (err) { /* 忽略 */ }
+  });
+
+  /* ======================= 底部抽屉拖拽与磁吸卡顿 ======================= */
+  var dragState = null;
+
+  function getNaturalHeight() {
+    var handleH = 24;
+    var panelEl = document.querySelector('.panel');
+    var footerEl = document.querySelector('.panel-footer');
+    var panelH = panelEl.scrollHeight;
+    var footerH = footerEl.offsetHeight;
+    return handleH + panelH + footerH;
+  }
+
+  window.addEventListener('load', function() {
+    if (mqMobile.matches) sheet.style.height = getNaturalHeight() + 'px';
+  });
+  if (mqMobile.matches) sheet.style.height = getNaturalHeight() + 'px';
+
+  sheetHandle.addEventListener('pointerdown', function (e) {
+    if (!mqMobile.matches) return;
+    
+    var rect = sheet.getBoundingClientRect();
+    var snapH = getNaturalHeight(); // 默认展开高度（也是最大高度）
+
+    dragState = {
+      startY: e.clientY,
+      startHeight: rect.height,
+      currentHeight: rect.height,
+      snapHeight: snapH,
+      isMoved: false,
+      prevDist: undefined
+    };
+    
+    sheet.style.transition = 'none';
+    sheet.style.height = rect.height + 'px';
+    sheetHandle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  sheetHandle.addEventListener('pointermove', function (e) {
+    if (!dragState) return;
+    
+    var deltaY = dragState.startY - e.clientY;
+    if (Math.abs(deltaY) > 3) {
+      dragState.isMoved = true;
+    }
+    
+    var rawHeight = dragState.startHeight + deltaY;
+    var snapHeight = dragState.snapHeight;
+    var targetHeight = rawHeight;
+
+    // 核心逻辑：实现“明显的卡顿/磁吸阻力”
+    // 当距离默认高度（磁吸点）40px以内时，移动变得极度缓慢（0.15倍速）
+    var threshold = 40; 
+    var damping = 0.15;
+
+    if (rawHeight >= snapHeight) {
+      // 向上拉动，因为最大高度就是 snapHeight，所以直接卡死
+      targetHeight = snapHeight;
+      if (dragState.prevDist !== undefined && dragState.prevDist > threshold) {
+        if (navigator.vibrate) navigator.vibrate(15); // 碰到顶的震动
+      }
+      dragState.prevDist = -1; 
+    } else {
+      var dist = snapHeight - rawHeight;
+      
+      // 跨越吸附边界时的震动反馈
+      if (dragState.prevDist !== undefined) {
+        var wasInside = dragState.prevDist <= threshold && dragState.prevDist >= 0;
+        var isInside = dist <= threshold;
+        if (wasInside !== isInside && dragState.prevDist !== -1) {
+          if (navigator.vibrate) navigator.vibrate(15); 
+        }
+      }
+      dragState.prevDist = dist;
+
+      if (dist <= threshold) {
+        // 在阻力区（卡顿区）
+        targetHeight = snapHeight - (dist * damping);
+      } else {
+        // 突破阻力区，恢复正常滑动
+        targetHeight = snapHeight - (threshold * damping) - (dist - threshold);
+      }
+    }
+
+    targetHeight = Math.max(24, targetHeight);
+    dragState.currentHeight = targetHeight;
+    sheet.style.height = targetHeight + 'px';
+    e.preventDefault();
+  });
+
+  function onPointerUp(e) {
+    if (!dragState) return;
+    
+    try { sheetHandle.releasePointerCapture(e.pointerId); } catch (err) {}
+    
+    sheet.style.transition = 'height .28s cubic-bezier(.22,.61,.36,1)';
+    
+    var finalHeight = dragState.currentHeight;
+    var snapHeight = dragState.snapHeight;
+    var threshold = 40;
+
+    if (!dragState.isMoved) {
+      // 纯点击
+      if (finalHeight < snapHeight / 2) {
+        sheet.classList.remove('collapsed');
+        sheet.style.height = snapHeight + 'px';
+        sheetHandle.setAttribute('aria-expanded', 'true');
+      } else {
+        sheet.classList.add('collapsed');
+        sheet.style.height = '24px';
+        sheetHandle.setAttribute('aria-expanded', 'false');
+      }
+    } else {
+      // 拖拽结束，判断松手位置
+      if (finalHeight < 80) {
+        // 到底了，收起
+        sheet.classList.add('collapsed');
+        sheet.style.height = '24px';
+        sheetHandle.setAttribute('aria-expanded', 'false');
+      } else if (finalHeight > snapHeight - threshold) {
+        // 还在磁吸区或者超过了，自动吸附回默认展开高度
+        sheet.classList.remove('collapsed');
+        sheet.style.height = snapHeight + 'px';
+        sheetHandle.setAttribute('aria-expanded', 'true');
+      } else {
+        // 留在中间高度
+        sheet.classList.remove('collapsed');
+        sheet.style.height = finalHeight + 'px';
+        sheetHandle.setAttribute('aria-expanded', 'true');
+      }
+    }
+    dragState = null;
+  }
+
+  sheetHandle.addEventListener('pointerup', onPointerUp);
+  sheetHandle.addEventListener('pointercancel', onPointerUp);
+
+  window.addEventListener('resize', function() {
+    if (!mqMobile.matches) return;
+    if (dragState) return;
+    if (!sheet.classList.contains('collapsed')) {
+      sheet.style.height = getNaturalHeight() + 'px';
+    }
+  });
+
+  /* ======================= 初始化 ======================= */
+  render();
+
+})();
+</script>
+</body>
+</html>
